@@ -1,4 +1,4 @@
-package com.anormous.base;
+package com.anormous.helper;
 
 import android.content.Context;
 import android.database.SQLException;

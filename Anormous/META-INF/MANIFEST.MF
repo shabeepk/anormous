@@ -1,4 +1,4 @@
 Manifest-Version: 1.0
-Created-By: 0.1 (Folio3 Inc.)
+Created-By: 0.4 (Sharique Abdullah, Folio3. Inc.)
 Name: com/anormous/
 Sealed: true

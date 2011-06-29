@@ -1,7 +1,7 @@
 package com.anormous.base;
 
-import com.anormous.entity.DefaultEntityMapper;
-import com.anormous.entity.IEntityMapper;
+import com.anormous.mapper.DefaultEntityMapper;
+import com.anormous.mapper.IEntityMapper;
 
 public class AnormousConfig
 {

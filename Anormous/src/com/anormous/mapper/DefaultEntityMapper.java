@@ -1,23 +1,26 @@
-package com.anormous.entity;
+package com.anormous.mapper;
 
 import java.lang.annotation.Annotation;
 import java.lang.reflect.InvocationTargetException;
 import java.lang.reflect.Method;
-import java.util.HashMap;
 import java.util.LinkedHashMap;
 import java.util.Map;
-
-import com.anormous.annotation.Column;
-import com.anormous.annotation.Table;
-import com.anormous.entity.EntityMapping.ColumnMapping;
 
 import android.content.ContentValues;
 import android.database.Cursor;
 import android.util.Log;
 
+import com.anormous.annotation.Column;
+import com.anormous.annotation.IdentityColumn;
+import com.anormous.annotation.Table;
+import com.anormous.error.AnormousException;
+import com.anormous.error.InvalidClassTypeException;
+import com.anormous.mapper.EntityMapping.ColumnMapping;
+import com.anormous.mapper.EntityMapping.IdColumnMapping;
+
 public class DefaultEntityMapper implements IEntityMapper
 {
-	private static LinkedHashMap<Class, EntityMapping> mapperCache = new LinkedHashMap<Class, EntityMapping>();
+	private static LinkedHashMap<Class<?>, EntityMapping> mapperCache = new LinkedHashMap<Class<?>, EntityMapping>();
 
 	public DefaultEntityMapper()
 	{
@@ -25,7 +28,7 @@ public class DefaultEntityMapper implements IEntityMapper
 	}
 
 	@Override
-	public EntityMapping mapClass(Class entityClass)
+	public EntityMapping mapClass(Class<?> entityClass) throws AnormousException
 	{
 		if (mapperCache.containsKey(entityClass))
 		{
@@ -33,42 +36,77 @@ public class DefaultEntityMapper implements IEntityMapper
 		}
 		else
 		{
+			if (entityClass.isAnonymousClass() || entityClass.isArray() || entityClass.isEnum() || entityClass.isAnnotation() || entityClass.isLocalClass())
+				throw new InvalidClassTypeException("Class [" + entityClass.getName() + "] can not be persisted. It may be because the class is one of anonymous class, array, enum, local or annotation.");
+
 			EntityMapping mapping = new EntityMapping();
 
-			generateTableNameFromClass(entityClass);
+			mapping.setEntityClass(entityClass);
+			mapping.setMappedTableName(generateTableNameFromClass(entityClass));
+
+			IdColumnMapping potentialId = null;
 
 			for (Method method : entityClass.getMethods())
 			{
-				if (method.getName().startsWith("get") && method.getParameterTypes().length == 0)
+				if (isValidProperty(entityClass, method))
 				{
-					Column mappingAnnotation = (Column) method.getAnnotation(Column.class);
+					Column columnAnnotation = (Column) method.getAnnotation(Column.class);
+					IdentityColumn idAnnotation = (IdentityColumn) method.getAnnotation(IdentityColumn.class);
 
 					ColumnMapping columnMapping = new ColumnMapping();
 
 					columnMapping.setColumnMethod(method);
 					columnMapping.setJavaType(method.getReturnType());
 
-					if (mappingAnnotation != null)
+					String columnName = generateColumnNameFromProprety(method);
+					String columnSize = "";
+					String defaultValue = "";
+					String columnType = "VARCHAR";
+
+					if (idAnnotation != null)
 					{
-						columnMapping.setColumnName(mappingAnnotation.value());
-						columnMapping.setColumnSize(mappingAnnotation.size());
-						columnMapping.setDefaultValue(mappingAnnotation.defaultValue());
-						columnMapping.setColumnType(mappingAnnotation.dataType());
+						columnName = idAnnotation.value();
+
+						if (idAnnotation.size() != null && idAnnotation.size().length() > 0)
+							columnSize = idAnnotation.size();
+
+						if (idAnnotation.defaultValue() != null && idAnnotation.defaultValue().length() > 0)
+							defaultValue = idAnnotation.defaultValue();
+
+						if (idAnnotation.dataType() != null && idAnnotation.dataType().length() > 0)
+							columnType = idAnnotation.dataType();
+
+						if (mapping.getIdMapping() == null)
+							mapping.setIdMapping(new IdColumnMapping(idAnnotation.enforce(), columnMapping));
 					}
-					else
+					else if (columnAnnotation != null)
 					{
-						columnMapping.setColumnName(generateColumnNameFromProprety(method));
-						columnMapping.setColumnSize("");
-						columnMapping.setDefaultValue("");
-						columnMapping.setColumnType("VARCHAR");
+						columnName = columnAnnotation.value();
+
+						if (columnAnnotation.size() != null && columnAnnotation.size().length() > 0)
+							columnSize = columnAnnotation.size();
+
+						if (columnAnnotation.defaultValue() != null && columnAnnotation.defaultValue().length() > 0)
+							defaultValue = columnAnnotation.defaultValue();
+
+						if (columnAnnotation.dataType() != null && columnAnnotation.dataType().length() > 0)
+							columnType = columnAnnotation.dataType();
 					}
+
+					columnMapping.setColumnName(columnName);
+					columnMapping.setColumnSize(columnSize);
+					columnMapping.setDefaultValue(defaultValue);
+					columnMapping.setColumnType(columnType);
 
 					mapping.setColumnMapping(method, columnMapping);
 
 					if (method.getName().equals("getId"))
-						mapping.setIdMapping(columnMapping);
+						potentialId = new IdColumnMapping(columnMapping);
 				}
 			}
+
+			if (potentialId != null && mapping.getIdMapping() == null)
+				mapping.setIdMapping(potentialId);
 
 			mapperCache.put(entityClass, mapping);
 
@@ -76,8 +114,31 @@ public class DefaultEntityMapper implements IEntityMapper
 		}
 	}
 
+	private boolean isValidProperty(Class<?> entityClass, Method method)
+	{
+		try
+		{
+			if (method.getName().startsWith("get") && method.getParameterTypes().length == 0 && !method.getName().equals("getClass"))
+			{
+				Method setter = entityClass.getMethod(method.getName().replace("get", "set"), method.getReturnType());
+
+				return setter != null;
+			}
+		}
+		catch (SecurityException e)
+		{
+			Log.d(this.getClass().toString(), "Ignoring potential property : " + method, e);
+		}
+		catch (NoSuchMethodException e)
+		{
+			Log.d(this.getClass().toString(), "Ignoring potential property : " + method, e);
+		}
+
+		return false;
+	}
+
 	@Override
-	public Object valuesToBean(Cursor cursor, Class entityClass)
+	public Object valuesToBean(Cursor cursor, Class<?> entityClass) throws AnormousException
 	{
 		Object bean;
 		try
@@ -110,7 +171,7 @@ public class DefaultEntityMapper implements IEntityMapper
 	}
 
 	@Override
-	public ContentValues beanToValues(Object bean)
+	public ContentValues beanToValues(Object bean) throws AnormousException
 	{
 		ContentValues contentValues = new ContentValues();
 
@@ -136,46 +197,47 @@ public class DefaultEntityMapper implements IEntityMapper
 		{
 			setter = bean.getClass().getMethod(columnMapping.getColumnMethod().getName().replace("get", "set"), columnMapping.getJavaType());
 
-			Class javaType = columnMapping.getJavaType();
+			Class<?> javaType = columnMapping.getJavaType();
 
 			if (setter != null)
 			{
 				if (javaType.equals(Boolean.class))
 				{
-					if ("1".equals(cursor.getString(cursor.getColumnIndex(columnMapping.getColumnName()))) || "true".equals(cursor.getString(cursor.getColumnIndex(columnMapping.getColumnName()))))
-						setter.invoke(bean, true);
+					String value = cursor.getString(cursor.getColumnIndex(columnMapping.getColumnName()));
+
+					setter.invoke(bean, "1".equals(value) || "true".equals(value));
 				}
 				else if (javaType.equals(String.class))
 				{
-					setter.invoke(cursor.getString(cursor.getColumnIndex(columnMapping.getColumnName())));
+					setter.invoke(bean, cursor.getString(cursor.getColumnIndex(columnMapping.getColumnName())));
 				}
 				else if (javaType.equals(Double.class))
 				{
-					setter.invoke(new Double(cursor.getString(cursor.getColumnIndex(columnMapping.getColumnName()))));
+					setter.invoke(bean, new Double(cursor.getString(cursor.getColumnIndex(columnMapping.getColumnName()))));
 				}
 				else if (javaType.equals(Float.class))
 				{
-					setter.invoke(new Float(cursor.getString(cursor.getColumnIndex(columnMapping.getColumnName()))));
+					setter.invoke(bean, new Float(cursor.getString(cursor.getColumnIndex(columnMapping.getColumnName()))));
 				}
 				else if (javaType.equals(Long.class))
 				{
-					setter.invoke(new Long(cursor.getString(cursor.getColumnIndex(columnMapping.getColumnName()))));
+					setter.invoke(bean, new Long(cursor.getString(cursor.getColumnIndex(columnMapping.getColumnName()))));
 				}
 				else if (javaType.equals(Integer.class))
 				{
-					setter.invoke(new Integer(cursor.getString(cursor.getColumnIndex(columnMapping.getColumnName()))));
+					setter.invoke(bean, new Integer(cursor.getString(cursor.getColumnIndex(columnMapping.getColumnName()))));
 				}
 				else if (javaType.equals(Short.class))
 				{
-					setter.invoke(new Short(cursor.getString(cursor.getColumnIndex(columnMapping.getColumnName()))));
+					setter.invoke(bean, new Short(cursor.getString(cursor.getColumnIndex(columnMapping.getColumnName()))));
 				}
 				else if (javaType.equals(Byte.class))
 				{
-					setter.invoke(new Byte(cursor.getString(cursor.getColumnIndex(columnMapping.getColumnName()))));
+					setter.invoke(bean, new Byte(cursor.getString(cursor.getColumnIndex(columnMapping.getColumnName()))));
 				}
 				else if (javaType.equals(byte[].class))
 				{
-					setter.invoke(cursor.getBlob(cursor.getColumnIndex(columnMapping.getColumnName())));
+					setter.invoke(bean, cursor.getBlob(cursor.getColumnIndex(columnMapping.getColumnName())));
 				}
 			}
 			else
@@ -274,7 +336,7 @@ public class DefaultEntityMapper implements IEntityMapper
 		}
 	}
 
-	public String generateTableNameFromClass(Class entityClass)
+	public String generateTableNameFromClass(Class<?> entityClass)
 	{
 		String returnValue = null;
 
@@ -287,7 +349,7 @@ public class DefaultEntityMapper implements IEntityMapper
 		}
 
 		if (returnValue == null)
-			returnValue = camelToDelimited(entityClass.toString());
+			returnValue = camelToDelimited(entityClass.getCanonicalName());
 
 		return returnValue;
 	}

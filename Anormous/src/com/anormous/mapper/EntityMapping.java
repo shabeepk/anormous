@@ -1,4 +1,4 @@
-package com.anormous.entity;
+package com.anormous.mapper;
 
 import java.lang.reflect.Method;
 import java.util.HashMap;
@@ -6,17 +6,17 @@ import java.util.Map;
 
 public class EntityMapping
 {
-	private Class entityClass;
+	private Class<?> entityClass;
 	private String mappedTableName;
-	private ColumnMapping idMapping;
+	private IdColumnMapping idMapping;
 	private Map<Method, ColumnMapping> mappedColumns = new HashMap<Method, ColumnMapping>();
 
-	public ColumnMapping getIdMapping()
+	public IdColumnMapping getIdMapping()
 	{
 		return idMapping;
 	}
 
-	public void setIdMapping(ColumnMapping idMapping)
+	public void setIdMapping(IdColumnMapping idMapping)
 	{
 		this.idMapping = idMapping;
 	}
@@ -26,12 +26,12 @@ public class EntityMapping
 		return new HashMap<Method, ColumnMapping>(mappedColumns);
 	}
 
-	public Class getEntityClass()
+	public Class<?> getEntityClass()
 	{
 		return entityClass;
 	}
 
-	public void setEntityClass(Class entityClass)
+	public void setEntityClass(Class<?> entityClass)
 	{
 		this.entityClass = entityClass;
 	}
@@ -134,6 +134,48 @@ public class EntityMapping
 		public void setColumnSize(String columnSize)
 		{
 			this.columnSize = columnSize;
+		}
+	}
+
+	public static class IdColumnMapping extends ColumnMapping
+	{
+		private boolean enforce;
+
+		public boolean isEnforce()
+		{
+			return enforce;
+		}
+
+		public void setEnforce(boolean enforce)
+		{
+			this.enforce = enforce;
+		}
+
+		public IdColumnMapping()
+		{
+			this.enforce = true;
+		}
+
+		public IdColumnMapping(ColumnMapping columnMapping)
+		{
+			this.enforce = true;
+
+			super.setColumnMethod(columnMapping.getColumnMethod());
+			super.setColumnName(columnMapping.getColumnName());
+			super.setColumnSize(columnMapping.getColumnSize());
+			super.setColumnType(columnMapping.getColumnType());
+			super.setDefaultValue(columnMapping.getDefaultValue());
+		}
+
+		public IdColumnMapping(boolean enforce, ColumnMapping columnMapping)
+		{
+			this.enforce = enforce;
+
+			super.setColumnMethod(columnMapping.getColumnMethod());
+			super.setColumnName(columnMapping.getColumnName());
+			super.setColumnSize(columnMapping.getColumnSize());
+			super.setColumnType(columnMapping.getColumnType());
+			super.setDefaultValue(columnMapping.getDefaultValue());
 		}
 	}
 }

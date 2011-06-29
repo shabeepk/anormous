@@ -2,6 +2,11 @@ package com.anormous.error;
 
 public class AnormousException extends Exception
 {
+	/**
+	 * 
+	 */
+	private static final long serialVersionUID = -6666116932995804468L;
+
 	public AnormousException()
 	{
 		super();

@@ -6,9 +6,8 @@ import java.lang.annotation.RetentionPolicy;
 import java.lang.annotation.Target;
 
 @Retention(RetentionPolicy.RUNTIME)
-@Target( { ElementType.METHOD })
-
-public @interface Column
+@Target({ ElementType.METHOD })
+public @interface IdentityColumn
 {
 	String value();
 
@@ -17,4 +16,6 @@ public @interface Column
 	String dataType() default "";
 
 	String defaultValue() default "";
+
+	boolean enforce() default true;
 }
