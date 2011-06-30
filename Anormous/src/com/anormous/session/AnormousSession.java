@@ -262,7 +262,7 @@ public class AnormousSession
 
 			ContentValues values = mapper.beanToValues(bean);
 
-			whereClause = forwardMapColumnNames(whereClause, mapping.getMappedColumns().values());
+			whereClause = mapper.forwardMapColumnNames(whereClause, bean.getClass());
 
 			db.update(mapping.getMappedTableName(), values, whereClause, whereArgs);
 
@@ -333,7 +333,7 @@ public class AnormousSession
 
 			syncClassAndTableSchema(mapping);
 
-			whereClause = forwardMapColumnNames(whereClause, mapping.getMappedColumns().values());
+			whereClause = mapper.forwardMapColumnNames(whereClause, bean.getClass());
 
 			db.delete(mapping.getMappedTableName(), whereClause, whereArgs);
 
@@ -531,22 +531,22 @@ public class AnormousSession
 
 			if (whereClause != null)
 			{
-				whereClause = forwardMapColumnNames(whereClause, columnMappings);
+				whereClause = mapper.forwardMapColumnNames(whereClause, entityClass);
 			}
 
 			if (groupBy != null)
 			{
-				groupBy = forwardMapColumnNames(groupBy, columnMappings);
+				groupBy = mapper.forwardMapColumnNames(groupBy, entityClass);
 			}
 
 			if (having != null)
 			{
-				having = forwardMapColumnNames(having, columnMappings);
+				having = mapper.forwardMapColumnNames(having, entityClass);
 			}
 
 			if (orderBy != null)
 			{
-				orderBy = forwardMapColumnNames(orderBy, columnMappings);
+				orderBy = mapper.forwardMapColumnNames(orderBy, entityClass);
 			}
 
 			Cursor cursor = db.query(distinct, tableName, columns, whereClause, whereArgs, groupBy, having, orderBy, limit);
@@ -613,21 +613,6 @@ public class AnormousSession
 		}
 
 		return true;
-	}
-
-	private String forwardMapColumnNames(String query, Collection<ColumnMapping> mappings)
-	{
-		String result = query;
-
-		for (ColumnMapping columnMapping : mappings)
-		{
-			String propertyName = columnMapping.getColumnMethod().getName().substring(3);
-			propertyName = Character.toLowerCase(propertyName.charAt(0)) + propertyName.substring(1);
-
-			result = result.replaceAll(propertyName, columnMapping.getColumnName());
-		}
-
-		return result;
 	}
 
 	private boolean autoOpen(int mode) throws AnormousException

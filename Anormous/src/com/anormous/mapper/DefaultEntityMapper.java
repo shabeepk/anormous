@@ -3,6 +3,7 @@ package com.anormous.mapper;
 import java.lang.annotation.Annotation;
 import java.lang.reflect.InvocationTargetException;
 import java.lang.reflect.Method;
+import java.util.Collection;
 import java.util.LinkedHashMap;
 import java.util.Map;
 
@@ -28,6 +29,24 @@ public class DefaultEntityMapper implements IEntityMapper
 	}
 
 	@Override
+	public String forwardMapColumnNames(String query, Class<?> entityClass) throws AnormousException
+	{
+		EntityMapping mapping = mapClass(entityClass);
+
+		String result = query;
+
+		for (ColumnMapping columnMapping : mapping.getMappedColumns().values())
+		{
+			String propertyName = columnMapping.getColumnMethod().getName().substring(3);
+			propertyName = Character.toLowerCase(propertyName.charAt(0)) + propertyName.substring(1);
+
+			result = result.replaceAll(propertyName, columnMapping.getColumnName());
+		}
+
+		return result;
+	}
+
+	@Override
 	public EntityMapping mapClass(Class<?> entityClass) throws AnormousException
 	{
 		if (mapperCache.containsKey(entityClass))
@@ -50,6 +69,8 @@ public class DefaultEntityMapper implements IEntityMapper
 			{
 				if (isValidProperty(entityClass, method))
 				{
+					boolean isIdMapping = false;
+
 					Column columnAnnotation = (Column) method.getAnnotation(Column.class);
 					IdentityColumn idAnnotation = (IdentityColumn) method.getAnnotation(IdentityColumn.class);
 
@@ -76,8 +97,7 @@ public class DefaultEntityMapper implements IEntityMapper
 						if (idAnnotation.dataType() != null && idAnnotation.dataType().length() > 0)
 							columnType = idAnnotation.dataType();
 
-						if (mapping.getIdMapping() == null)
-							mapping.setIdMapping(new IdColumnMapping(idAnnotation.enforce(), columnMapping));
+						isIdMapping = true;
 					}
 					else if (columnAnnotation != null)
 					{
@@ -100,7 +120,9 @@ public class DefaultEntityMapper implements IEntityMapper
 
 					mapping.setColumnMapping(method, columnMapping);
 
-					if (method.getName().equals("getId"))
+					if (isIdMapping && mapping.getIdMapping() == null)
+						mapping.setIdMapping(new IdColumnMapping(idAnnotation.enforce(), columnMapping));
+					else if (method.getName().equals("getId"))
 						potentialId = new IdColumnMapping(columnMapping);
 				}
 			}

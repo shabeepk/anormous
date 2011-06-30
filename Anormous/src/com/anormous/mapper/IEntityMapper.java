@@ -1,9 +1,9 @@
 package com.anormous.mapper;
 
-import com.anormous.error.AnormousException;
-
 import android.content.ContentValues;
 import android.database.Cursor;
+
+import com.anormous.error.AnormousException;
 
 public interface IEntityMapper
 {
@@ -12,4 +12,6 @@ public interface IEntityMapper
 	ContentValues beanToValues(Object bean) throws AnormousException;
 
 	Object valuesToBean(Cursor cursor, Class<?> entityClass) throws AnormousException;
+
+	String forwardMapColumnNames(String query, Class<?> entityClass) throws AnormousException;
 }
