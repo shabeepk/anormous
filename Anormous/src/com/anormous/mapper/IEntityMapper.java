@@ -14,4 +14,6 @@ public interface IEntityMapper
 	Object valuesToBean(Cursor cursor, Class<?> entityClass) throws AnormousException;
 
 	String forwardMapColumnNames(String query, Class<?> entityClass) throws AnormousException;
+
+	String generateCreateTableStatement(Class<?> entityClass) throws AnormousException;
 }

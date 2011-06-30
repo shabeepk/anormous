@@ -1,7 +1,6 @@
 package com.anormous.session;
 
 import java.lang.reflect.InvocationTargetException;
-import java.lang.reflect.Method;
 import java.util.ArrayList;
 import java.util.Collection;
 import java.util.List;
@@ -19,8 +18,9 @@ import com.anormous.error.DuplicateKeyViolationException;
 import com.anormous.helper.AnormousGenericDBHelper;
 import com.anormous.mapper.DefaultEntityMapper;
 import com.anormous.mapper.EntityMapping;
-import com.anormous.mapper.EntityMapping.ColumnMapping;
 import com.anormous.mapper.IEntityMapper;
+import com.anormous.mapper.EntityMapping.ColumnMapping;
+import com.anormous.mapper.EntityMapping.Property;
 
 public class AnormousSession
 {
@@ -209,7 +209,7 @@ public class AnormousSession
 
 				try
 				{
-					objectId = mapping.getIdMapping().getColumnMethod().invoke(bean);
+					objectId = mapping.getIdMapping().getProperty().getValueFrom(bean);
 				}
 				catch (IllegalArgumentException e)
 				{
@@ -236,7 +236,19 @@ public class AnormousSession
 
 			ContentValues values = mapper.beanToValues(bean);
 
-			db.insert(mapping.getMappedTableName(), null, values);
+			Property property = mapping.getIdMapping().getProperty();
+
+			Long rowId = db.insert(mapping.getMappedTableName(), null, values);
+
+			if (rowId != null && rowId != -1)
+			{
+				List<?> result = select(mapping.getEntityClass(), "rowid = ?", new String[] { rowId.toString() });
+
+				if (result.size() > 0)
+				{
+					property.setValueTo(bean, property.getValueFrom(bean));
+				}
+			}
 
 			autoClose(opened);
 		}
@@ -289,9 +301,10 @@ public class AnormousSession
 			if (mapping.getIdMapping() != null)
 			{
 				String value;
+
 				try
 				{
-					value = mapping.getIdMapping().getColumnMethod().invoke(bean).toString();
+					value = mapping.getIdMapping().getProperty().getValueFrom(bean).toString();
 				}
 				catch (IllegalArgumentException e)
 				{
@@ -361,7 +374,7 @@ public class AnormousSession
 
 				try
 				{
-					value = mapping.getIdMapping().getColumnMethod().invoke(bean).toString();
+					value = mapping.getIdMapping().getProperty().getValueFrom(bean).toString();
 				}
 				catch (IllegalArgumentException e)
 				{
@@ -517,7 +530,7 @@ public class AnormousSession
 
 			String tableName = mapping.getMappedTableName();
 
-			Map<Method, ColumnMapping> mappedColumns = mapping.getMappedColumns();
+			Map<Property, ColumnMapping> mappedColumns = mapping.getMappedColumns();
 			Collection<ColumnMapping> columnMappings = mappedColumns.values();
 
 			String[] columns = new String[mappedColumns.size()];
@@ -584,35 +597,27 @@ public class AnormousSession
 		return cursor.moveToFirst();
 	}
 
-	private boolean syncClassAndTableSchema(EntityMapping mapping) throws SQLiteException
+	private boolean syncClassAndTableSchema(EntityMapping mapping) throws AnormousException
 	{
-		boolean tableExists = db.rawQuery("SELECT name FROM sqlite_master WHERE type='table' AND name= ?;", new String[] { mapping.getMappedTableName() }).moveToFirst();
-
-		if (!tableExists)
+		try
 		{
-			StringBuffer sql = new StringBuffer("CREATE TABLE " + mapping.getMappedTableName() + " ( ");
-			boolean first = true;
+			boolean tableExists = db.rawQuery("SELECT name FROM sqlite_master WHERE type='table' AND name= ?;", new String[] { mapping.getMappedTableName() }).moveToFirst();
 
-			for (ColumnMapping columnMapping : mapping.getMappedColumns().values())
+			if (!tableExists)
 			{
-				if (!first)
-					sql.append(",");
-
-				sql.append(columnMapping.getColumnName());
-				sql.append(" ");
-				sql.append(columnMapping.getColumnType());
-				sql.append(columnMapping.getColumnSize().length() > 0 ? "(" + columnMapping.getColumnSize() + ")" : "");
-				sql.append(columnMapping.getDefaultValue().length() > 0 ? " DEFAULT " + columnMapping.getDefaultValue() : "");
-
-				first = false;
+				db.execSQL(mapper.generateCreateTableStatement(mapping.getEntityClass()));
 			}
 
-			sql.append(");");
-
-			db.execSQL(sql.toString());
+			return true;
 		}
-
-		return true;
+		catch (AnormousException ex)
+		{
+			throw ex;
+		}
+		catch (Exception ex)
+		{
+			throw new AnormousException("Error occured while trying to create table for entity : " + mapping.getEntityClass(), ex);
+		}
 	}
 
 	private boolean autoOpen(int mode) throws AnormousException

@@ -17,6 +17,7 @@ import com.anormous.error.AnormousException;
 import com.anormous.error.InvalidClassTypeException;
 import com.anormous.mapper.EntityMapping.ColumnMapping;
 import com.anormous.mapper.EntityMapping.IdColumnMapping;
+import com.anormous.mapper.EntityMapping.Property;
 
 public class DefaultEntityMapper implements IEntityMapper
 {
@@ -36,9 +37,7 @@ public class DefaultEntityMapper implements IEntityMapper
 
 		for (ColumnMapping columnMapping : mapping.getMappedColumns().values())
 		{
-			String propertyName = columnMapping.getColumnMethod().getName().substring(3);
-			propertyName = Character.toLowerCase(propertyName.charAt(0)) + propertyName.substring(1);
-
+			String propertyName = columnMapping.getProperty().getName();
 			result = result.replaceAll(propertyName, columnMapping.getColumnName());
 		}
 
@@ -64,24 +63,30 @@ public class DefaultEntityMapper implements IEntityMapper
 
 			IdColumnMapping potentialId = null;
 
-			for (Method method : entityClass.getMethods())
+			for (Method getter : entityClass.getMethods())
 			{
-				if (isValidProperty(entityClass, method))
+				String propertyName = getter.getName().substring(3);
+				propertyName = Character.toLowerCase(propertyName.charAt(0)) + propertyName.substring(1);
+
+				Method setter = null;
+				if ((setter = getSetterIfValidGetter(entityClass, getter)) != null)
 				{
+					Property property = new Property(propertyName, entityClass, getter, setter, getter.getReturnType());
+
 					boolean isIdMapping = false;
 
-					Column columnAnnotation = (Column) method.getAnnotation(Column.class);
-					IdentityColumn idAnnotation = (IdentityColumn) method.getAnnotation(IdentityColumn.class);
+					Column columnAnnotation = (Column) getter.getAnnotation(Column.class);
+					IdentityColumn idAnnotation = (IdentityColumn) getter.getAnnotation(IdentityColumn.class);
 
 					ColumnMapping columnMapping = new ColumnMapping();
 
-					columnMapping.setColumnMethod(method);
-					columnMapping.setJavaType(method.getReturnType());
+					columnMapping.setProperty(property);
+					columnMapping.setJavaType(getter.getReturnType());
 
-					String columnName = generateColumnNameFromProprety(method);
+					String columnName = generateColumnNameFromProprety(getter);
 					String columnSize = "";
 					String defaultValue = "";
-					String columnType = "VARCHAR";
+					String columnType = resolveSQLType(property);
 
 					if (idAnnotation != null)
 					{
@@ -117,17 +122,29 @@ public class DefaultEntityMapper implements IEntityMapper
 					columnMapping.setDefaultValue(defaultValue);
 					columnMapping.setColumnType(columnType);
 
-					mapping.setColumnMapping(method, columnMapping);
-
 					if (isIdMapping && mapping.getIdMapping() == null)
-						mapping.setIdMapping(new IdColumnMapping(idAnnotation.enforce(), columnMapping));
-					else if (method.getName().equals("getId"))
+					{
+						IdColumnMapping idColumnMapping = new IdColumnMapping(idAnnotation.enforce(), idAnnotation.reuse(), columnMapping);
+
+						mapping.setIdMapping(idColumnMapping);
+						mapping.setColumnMapping(property, idColumnMapping);
+					}
+					else if (getter.getName().equals("getId"))
+					{
 						potentialId = new IdColumnMapping(columnMapping);
+					}
+					else
+					{
+						mapping.setColumnMapping(property, columnMapping);
+					}
 				}
 			}
 
 			if (potentialId != null && mapping.getIdMapping() == null)
+			{
 				mapping.setIdMapping(potentialId);
+				mapping.setColumnMapping(potentialId.getProperty(), potentialId);
+			}
 
 			mapperCache.put(entityClass, mapping);
 
@@ -135,7 +152,86 @@ public class DefaultEntityMapper implements IEntityMapper
 		}
 	}
 
-	private boolean isValidProperty(Class<?> entityClass, Method method)
+	@Override
+	public String generateCreateTableStatement(Class<?> entityClass) throws AnormousException
+	{
+		EntityMapping mapping = mapClass(entityClass);
+
+		StringBuffer sql = new StringBuffer("CREATE TABLE " + mapping.getMappedTableName() + " ( ");
+		boolean first = true;
+
+		for (ColumnMapping columnMapping : mapping.getMappedColumns().values())
+		{
+			if (!first)
+				sql.append(",");
+
+			sql.append(generateColumnDeclaration(columnMapping));
+
+			first = false;
+		}
+
+		sql.append(");");
+
+		return sql.toString();
+	}
+
+	private String generateColumnDeclaration(ColumnMapping columnMapping)
+	{
+		StringBuffer columnSql = new StringBuffer();
+
+		columnSql.append(columnMapping.getColumnName());
+		columnSql.append(" ");
+		columnSql.append(columnMapping.getColumnType());
+		columnSql.append(columnMapping.getColumnSize().length() > 0 ? "(" + columnMapping.getColumnSize() + ")" : "");
+		if (columnMapping.getColumnType().equalsIgnoreCase("INTEGER") && columnMapping instanceof IdColumnMapping)
+		{
+			columnSql.append(" PRIMARY KEY ");
+
+			if (((IdColumnMapping) columnMapping).isReuse())
+				columnSql.append(" AUTOINCREMENT ");
+		}
+		columnSql.append(columnMapping.getDefaultValue().length() > 0 ? " DEFAULT " + columnMapping.getDefaultValue() : "");
+
+		return columnSql.toString();
+	}
+
+	private String resolveSQLType(Property property)
+	{
+		String type = "VARCHAR";
+
+		if (property.getType().equals(Integer.class))
+		{
+			type = "INTEGER";
+		}
+		else if (property.getType().equals(Long.class))
+		{
+			type = "INTEGER";
+		}
+		else if (property.getType().equals(Short.class))
+		{
+			type = "INTEGER";
+		}
+		else if (property.getType().equals(Byte.class))
+		{
+			type = "INTEGER";
+		}
+		else if (property.getType().equals(Double.class))
+		{
+			type = "NUMERIC";
+		}
+		else if (property.getType().equals(Float.class))
+		{
+			type = "NUMERIC";
+		}
+		else if (property.getType().equals(byte[].class))
+		{
+			type = "BLOB";
+		}
+
+		return type;
+	}
+
+	private Method getSetterIfValidGetter(Class<?> entityClass, Method method)
 	{
 		try
 		{
@@ -143,7 +239,7 @@ public class DefaultEntityMapper implements IEntityMapper
 			{
 				Method setter = entityClass.getMethod(method.getName().replace("get", "set"), method.getReturnType());
 
-				return setter != null;
+				return setter;
 			}
 		}
 		catch (SecurityException e)
@@ -155,7 +251,7 @@ public class DefaultEntityMapper implements IEntityMapper
 			Log.d(this.getClass().toString(), "Ignoring potential property : " + method, e);
 		}
 
-		return false;
+		return null;
 	}
 
 	@Override
@@ -168,11 +264,11 @@ public class DefaultEntityMapper implements IEntityMapper
 
 			EntityMapping mapping = mapClass(entityClass);
 
-			Map<Method, ColumnMapping> columnMappings = mapping.getMappedColumns();
+			Map<Property, ColumnMapping> columnMappings = mapping.getMappedColumns();
 
-			for (Method method : columnMappings.keySet())
+			for (Property property : columnMappings.keySet())
 			{
-				ColumnMapping columnMapping = columnMappings.get(method);
+				ColumnMapping columnMapping = columnMappings.get(property);
 
 				resolveTypeAndGet(cursor, columnMapping, bean);
 			}
@@ -198,11 +294,11 @@ public class DefaultEntityMapper implements IEntityMapper
 
 		EntityMapping mapping = mapClass(bean.getClass());
 
-		Map<Method, ColumnMapping> columnMappings = mapping.getMappedColumns();
+		Map<Property, ColumnMapping> columnMappings = mapping.getMappedColumns();
 
-		for (Method method : columnMappings.keySet())
+		for (Property property : columnMappings.keySet())
 		{
-			ColumnMapping columnMapping = columnMappings.get(method);
+			ColumnMapping columnMapping = columnMappings.get(property);
 
 			resolveTypeAndPut(contentValues, columnMapping, bean);
 		}
@@ -212,58 +308,47 @@ public class DefaultEntityMapper implements IEntityMapper
 
 	private void resolveTypeAndGet(Cursor cursor, ColumnMapping columnMapping, Object bean)
 	{
-		Method setter;
-
 		try
 		{
-			setter = bean.getClass().getMethod(columnMapping.getColumnMethod().getName().replace("get", "set"), columnMapping.getJavaType());
+			Property property = columnMapping.getProperty();
 
-			Class<?> javaType = columnMapping.getJavaType();
-
-			if (setter != null)
+			if (property.getType().equals(Boolean.class))
 			{
-				if (javaType.equals(Boolean.class))
-				{
-					String value = cursor.getString(cursor.getColumnIndex(columnMapping.getColumnName()));
+				String value = cursor.getString(cursor.getColumnIndex(columnMapping.getColumnName()));
 
-					setter.invoke(bean, "1".equals(value) || "true".equals(value));
-				}
-				else if (javaType.equals(String.class))
-				{
-					setter.invoke(bean, cursor.getString(cursor.getColumnIndex(columnMapping.getColumnName())));
-				}
-				else if (javaType.equals(Double.class))
-				{
-					setter.invoke(bean, new Double(cursor.getString(cursor.getColumnIndex(columnMapping.getColumnName()))));
-				}
-				else if (javaType.equals(Float.class))
-				{
-					setter.invoke(bean, new Float(cursor.getString(cursor.getColumnIndex(columnMapping.getColumnName()))));
-				}
-				else if (javaType.equals(Long.class))
-				{
-					setter.invoke(bean, new Long(cursor.getString(cursor.getColumnIndex(columnMapping.getColumnName()))));
-				}
-				else if (javaType.equals(Integer.class))
-				{
-					setter.invoke(bean, new Integer(cursor.getString(cursor.getColumnIndex(columnMapping.getColumnName()))));
-				}
-				else if (javaType.equals(Short.class))
-				{
-					setter.invoke(bean, new Short(cursor.getString(cursor.getColumnIndex(columnMapping.getColumnName()))));
-				}
-				else if (javaType.equals(Byte.class))
-				{
-					setter.invoke(bean, new Byte(cursor.getString(cursor.getColumnIndex(columnMapping.getColumnName()))));
-				}
-				else if (javaType.equals(byte[].class))
-				{
-					setter.invoke(bean, cursor.getBlob(cursor.getColumnIndex(columnMapping.getColumnName())));
-				}
+				property.setValueTo(bean, "1".equals(value) || "true".equals(value));
 			}
-			else
+			else if (property.getType().equals(String.class))
 			{
-				Log.w(this.getClass().toString(), "Can not resolve setter for mapping : " + columnMapping);
+				property.setValueTo(bean, cursor.getString(cursor.getColumnIndex(columnMapping.getColumnName())));
+			}
+			else if (property.getType().equals(Double.class))
+			{
+				property.setValueTo(bean, new Double(cursor.getString(cursor.getColumnIndex(columnMapping.getColumnName()))));
+			}
+			else if (property.getType().equals(Float.class))
+			{
+				property.setValueTo(bean, new Float(cursor.getString(cursor.getColumnIndex(columnMapping.getColumnName()))));
+			}
+			else if (property.getType().equals(Long.class))
+			{
+				property.setValueTo(bean, new Long(cursor.getString(cursor.getColumnIndex(columnMapping.getColumnName()))));
+			}
+			else if (property.getType().equals(Integer.class))
+			{
+				property.setValueTo(bean, new Integer(cursor.getString(cursor.getColumnIndex(columnMapping.getColumnName()))));
+			}
+			else if (property.getType().equals(Short.class))
+			{
+				property.setValueTo(bean, new Short(cursor.getString(cursor.getColumnIndex(columnMapping.getColumnName()))));
+			}
+			else if (property.getType().equals(Byte.class))
+			{
+				property.setValueTo(bean, new Byte(cursor.getString(cursor.getColumnIndex(columnMapping.getColumnName()))));
+			}
+			else if (property.getType().equals(byte[].class))
+			{
+				property.setValueTo(bean, cursor.getBlob(cursor.getColumnIndex(columnMapping.getColumnName())));
 			}
 		}
 		catch (IllegalArgumentException e)
@@ -282,18 +367,13 @@ public class DefaultEntityMapper implements IEntityMapper
 		{
 			Log.w(this.getClass().toString(), "Can not resolve setter for mapping : " + columnMapping, e);
 		}
-		catch (NoSuchMethodException e)
-		{
-			Log.w(this.getClass().toString(), "Can not resolve setter for mapping : " + columnMapping, e);
-		}
-
 	}
 
 	private void resolveTypeAndPut(ContentValues contentValues, ColumnMapping columnMapping, Object bean)
 	{
 		try
 		{
-			Object value = columnMapping.getColumnMethod().invoke(bean);
+			Object value = columnMapping.getProperty().getValueFrom(bean);
 
 			if (value == null)
 			{

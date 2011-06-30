@@ -1,5 +1,6 @@
 package com.anormous.mapper;
 
+import java.lang.reflect.InvocationTargetException;
 import java.lang.reflect.Method;
 import java.util.HashMap;
 import java.util.Map;
@@ -9,7 +10,7 @@ public class EntityMapping
 	private Class<?> entityClass;
 	private String mappedTableName;
 	private IdColumnMapping idMapping;
-	private Map<Method, ColumnMapping> mappedColumns = new HashMap<Method, ColumnMapping>();
+	private Map<Property, ColumnMapping> mappedColumns = new HashMap<Property, ColumnMapping>();
 
 	public IdColumnMapping getIdMapping()
 	{
@@ -21,9 +22,9 @@ public class EntityMapping
 		this.idMapping = idMapping;
 	}
 
-	public Map<Method, ColumnMapping> getMappedColumns()
+	public Map<Property, ColumnMapping> getMappedColumns()
 	{
-		return new HashMap<Method, ColumnMapping>(mappedColumns);
+		return new HashMap<Property, ColumnMapping>(mappedColumns);
 	}
 
 	public Class<?> getEntityClass()
@@ -46,9 +47,9 @@ public class EntityMapping
 		this.mappedTableName = mappedTableName;
 	}
 
-	public void setColumnMapping(Method methodName, ColumnMapping columnMapping)
+	public void setColumnMapping(Property property, ColumnMapping columnMapping)
 	{
-		mappedColumns.put(methodName, columnMapping);
+		mappedColumns.put(property, columnMapping);
 	}
 
 	public ColumnMapping getColumnMapping(Method methodName)
@@ -56,25 +57,114 @@ public class EntityMapping
 		return mappedColumns.get(methodName);
 	}
 
-	public Method getReverseColumnMapping(String column)
+	public Property getReverseColumnMapping(String column)
 	{
-		for (Method method : mappedColumns.keySet())
+		for (Property property : mappedColumns.keySet())
 		{
-			if (mappedColumns.get(method).equals(column))
-				return method;
+			if (mappedColumns.get(property).equals(column))
+				return property;
 		}
 
 		return null;
 	}
 
+	public static class Property
+	{
+		private String name;
+		private Class<?> entityClass;
+		private Method getterMethod;
+		private Method setterMethod;
+		private Class<?> type;
+
+		public Property(String name, Class<?> entityClass, Method getterMethod, Method setterMethod, Class<?> type)
+		{
+			super();
+			this.name = name;
+			this.entityClass = entityClass;
+			this.getterMethod = getterMethod;
+			this.setterMethod = setterMethod;
+			this.type = type;
+		}
+
+		public Class<?> getEntityClass()
+		{
+			return entityClass;
+		}
+
+		public void setEntityClass(Class<?> entityClass)
+		{
+			this.entityClass = entityClass;
+		}
+
+		public Class<?> getType()
+		{
+			return type;
+		}
+
+		public void setType(Class<?> type)
+		{
+			this.type = type;
+		}
+
+		public String getName()
+		{
+			return name;
+		}
+
+		public void setName(String name)
+		{
+			this.name = name;
+		}
+
+		public Method getGetterMethod()
+		{
+			return getterMethod;
+		}
+
+		public void setGetterMethod(Method getterMethod)
+		{
+			this.getterMethod = getterMethod;
+		}
+
+		public Method getSetterMethod()
+		{
+			return setterMethod;
+		}
+
+		public void setSetterMethod(Method setterMethod)
+		{
+			this.setterMethod = setterMethod;
+		}
+
+		public Object getValueFrom(Object bean) throws IllegalArgumentException, IllegalAccessException, InvocationTargetException
+		{
+			return getterMethod.invoke(bean);
+		}
+
+		public void setValueTo(Object bean, Object value) throws IllegalArgumentException, IllegalAccessException, InvocationTargetException
+		{
+			setterMethod.invoke(bean, value);
+		}
+	}
+
 	public static class ColumnMapping
 	{
-		private Method columnMethod;
+		private Property property;
 		private String columnName;
 		private Class<?> javaType;
 		private String columnType;
 		private String defaultValue;
 		private String columnSize;
+
+		public Property getProperty()
+		{
+			return property;
+		}
+
+		public void setProperty(Property property)
+		{
+			this.property = property;
+		}
 
 		public String getDefaultValue()
 		{
@@ -94,16 +184,6 @@ public class EntityMapping
 		public void setJavaType(Class<?> javaType)
 		{
 			this.javaType = javaType;
-		}
-
-		public Method getColumnMethod()
-		{
-			return columnMethod;
-		}
-
-		public void setColumnMethod(Method columnMethod)
-		{
-			this.columnMethod = columnMethod;
 		}
 
 		public String getColumnName()
@@ -140,6 +220,17 @@ public class EntityMapping
 	public static class IdColumnMapping extends ColumnMapping
 	{
 		private boolean enforce;
+		private boolean reuse;
+
+		public boolean isReuse()
+		{
+			return reuse;
+		}
+
+		public void setReuse(boolean reuse)
+		{
+			this.reuse = reuse;
+		}
 
 		public boolean isEnforce()
 		{
@@ -159,19 +250,21 @@ public class EntityMapping
 		public IdColumnMapping(ColumnMapping columnMapping)
 		{
 			this.enforce = true;
+			this.reuse = false;
 
-			super.setColumnMethod(columnMapping.getColumnMethod());
+			super.setProperty(columnMapping.getProperty());
 			super.setColumnName(columnMapping.getColumnName());
 			super.setColumnSize(columnMapping.getColumnSize());
 			super.setColumnType(columnMapping.getColumnType());
 			super.setDefaultValue(columnMapping.getDefaultValue());
 		}
 
-		public IdColumnMapping(boolean enforce, ColumnMapping columnMapping)
+		public IdColumnMapping(boolean enforce, boolean reuse, ColumnMapping columnMapping)
 		{
 			this.enforce = enforce;
+			this.reuse = reuse;
 
-			super.setColumnMethod(columnMapping.getColumnMethod());
+			super.setProperty(columnMapping.getProperty());
 			super.setColumnName(columnMapping.getColumnName());
 			super.setColumnSize(columnMapping.getColumnSize());
 			super.setColumnType(columnMapping.getColumnType());
