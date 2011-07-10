@@ -5,7 +5,6 @@ import java.lang.reflect.Field;
 import java.lang.reflect.InvocationTargetException;
 import java.lang.reflect.Method;
 import java.util.HashMap;
-import java.util.List;
 import java.util.Map;
 
 import com.anormous.annotation.Column;
@@ -189,7 +188,12 @@ public class EntityMapping
 		public Object getValueFrom(Object bean) throws IllegalArgumentException, IllegalAccessException, InvocationTargetException
 		{
 			if (field != null)
+			{
+				if (!field.isAccessible())
+					field.setAccessible(true);
+
 				return field.get(bean);
+			}
 			else
 				return getterMethod.invoke(bean);
 		}
@@ -197,7 +201,12 @@ public class EntityMapping
 		public void setValueTo(Object bean, Object value) throws IllegalArgumentException, IllegalAccessException, InvocationTargetException
 		{
 			if (field != null)
+			{
+				if (!field.isAccessible())
+					field.setAccessible(true);
+
 				field.set(bean, value);
+			}
 			else
 				setterMethod.invoke(bean, value);
 		}

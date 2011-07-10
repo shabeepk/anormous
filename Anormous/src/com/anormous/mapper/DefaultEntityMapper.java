@@ -5,13 +5,10 @@ import java.lang.reflect.Field;
 import java.lang.reflect.InvocationTargetException;
 import java.lang.reflect.Method;
 import java.util.LinkedHashMap;
-import java.util.LinkedList;
-import java.util.List;
 import java.util.Map;
 
 import android.content.ContentValues;
 import android.database.Cursor;
-import android.provider.ContactsContract.CommonDataKinds.Relation;
 import android.util.Log;
 
 import com.anormous.annotation.Association.AssociationType;
@@ -76,9 +73,9 @@ public class DefaultEntityMapper implements IEntityMapper
 				Property property = properties.get(propertyName);
 				boolean isIdMapping = false;
 
-				Column columnAnnotation = (Column) property.getColumnAnnotation();
-				IdentityColumn idAnnotation = (IdentityColumn) property.getIdAnnotation();
-				Association associationAnnotation = (Association) property.getAssociationAnnotation();
+				Column columnAnnotation = property.getColumnAnnotation();
+				IdentityColumn idAnnotation = property.getIdAnnotation();
+				Association associationAnnotation = property.getAssociationAnnotation();
 
 				ColumnMapping columnMapping = new ColumnMapping();
 
@@ -178,12 +175,13 @@ public class DefaultEntityMapper implements IEntityMapper
 		for (Field field : entityClass.getFields())
 		{
 			String propertyName = field.getName();
-			Column columnAnnotation = (Column) field.getAnnotation(Column.class);
-			IdentityColumn idAnnotation = (IdentityColumn) field.getAnnotation(IdentityColumn.class);
+			Column columnAnnotation = field.getAnnotation(Column.class);
+			IdentityColumn idAnnotation = field.getAnnotation(IdentityColumn.class);
+
+			if (!field.isAccessible())
+				field.setAccessible(true);
 
 			property = new Property(propertyName, entityClass, null, null, field, field.getType(), idAnnotation != null ? idAnnotation : columnAnnotation);
-
-			result.put(propertyName, property);
 		}
 
 		for (Method getter : entityClass.getMethods())
@@ -191,13 +189,13 @@ public class DefaultEntityMapper implements IEntityMapper
 			String propertyName = getter.getName().substring(3);
 			propertyName = Character.toLowerCase(propertyName.charAt(0)) + propertyName.substring(1);
 
-			Column columnAnnotation = (Column) getter.getAnnotation(Column.class);
-			IdentityColumn idAnnotation = (IdentityColumn) getter.getAnnotation(IdentityColumn.class);
-
-			property = new Property(propertyName, entityClass, getter, null, null, getter.getReturnType(), idAnnotation != null ? idAnnotation : columnAnnotation);
+			Column columnAnnotation = getter.getAnnotation(Column.class);
+			IdentityColumn idAnnotation = getter.getAnnotation(IdentityColumn.class);
 
 			if (!result.containsKey(propertyName))
 			{
+				property = new Property(propertyName, entityClass, getter, null, null, getter.getReturnType(), idAnnotation != null ? idAnnotation : columnAnnotation);
+
 				try
 				{
 					property.setField(entityClass.getField(propertyName));
@@ -212,10 +210,11 @@ public class DefaultEntityMapper implements IEntityMapper
 				{
 					property.setSetterMethod(setter);
 				}
-
-				result.put(propertyName, property);
 			}
 		}
+
+		if (property != null)
+			result.put(property.getName(), property);
 
 		return result;
 	}

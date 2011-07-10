@@ -101,6 +101,7 @@ public abstract class AutoReplaceDBHelper extends AnormousGenericDBHelper
 		super.close();
 	}
 
+	@Override
 	protected SQLiteDatabase openDatabase(int flags) throws SQLException
 	{
 		// Open the database
