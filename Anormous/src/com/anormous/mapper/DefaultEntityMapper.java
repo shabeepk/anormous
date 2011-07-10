@@ -128,7 +128,9 @@ public class DefaultEntityMapper implements IEntityMapper
 						columnName = associationAnnotation.value();
 					}
 
+					@SuppressWarnings("unused")
 					Class<?> associativeClass = associationAnnotation.associativeClass();
+					@SuppressWarnings("unused")
 					AssociationType type = associationAnnotation.type();
 				}
 
