@@ -1,9 +1,16 @@
 package com.anormous.mapper;
 
+import java.lang.annotation.Annotation;
+import java.lang.reflect.Field;
 import java.lang.reflect.InvocationTargetException;
 import java.lang.reflect.Method;
 import java.util.HashMap;
+import java.util.List;
 import java.util.Map;
+
+import com.anormous.annotation.Column;
+import com.anormous.annotation.IdentityColumn;
+import com.anormous.annotation.Association;
 
 public class EntityMapping
 {
@@ -74,16 +81,59 @@ public class EntityMapping
 		private Class<?> entityClass;
 		private Method getterMethod;
 		private Method setterMethod;
+		private Field field;
 		private Class<?> type;
+		Column columnAnnotation;
+		IdentityColumn idAnnotation;
+		Association associationAnnotation;
 
-		public Property(String name, Class<?> entityClass, Method getterMethod, Method setterMethod, Class<?> type)
+		public Property(String name, Class<?> entityClass, Method getterMethod, Method setterMethod, Field field, Class<?> type, Annotation annotation)
 		{
 			super();
 			this.name = name;
 			this.entityClass = entityClass;
 			this.getterMethod = getterMethod;
 			this.setterMethod = setterMethod;
+			this.field = field;
 			this.type = type;
+
+			if (annotation instanceof Column)
+			{
+				this.columnAnnotation = (Column) annotation;
+			}
+			else if (annotation instanceof IdentityColumn)
+			{
+				this.idAnnotation = (IdentityColumn) annotation;
+			}
+			else if (annotation instanceof Association)
+			{
+				this.associationAnnotation = (Association) annotation;
+			}
+		}
+
+		public Association getAssociationAnnotation()
+		{
+			return associationAnnotation;
+		}
+
+		public Column getColumnAnnotation()
+		{
+			return columnAnnotation;
+		}
+
+		public IdentityColumn getIdAnnotation()
+		{
+			return idAnnotation;
+		}
+
+		public Field getField()
+		{
+			return field;
+		}
+
+		public void setField(Field field)
+		{
+			this.field = field;
 		}
 
 		public Class<?> getEntityClass()
@@ -138,12 +188,37 @@ public class EntityMapping
 
 		public Object getValueFrom(Object bean) throws IllegalArgumentException, IllegalAccessException, InvocationTargetException
 		{
-			return getterMethod.invoke(bean);
+			if (field != null)
+				return field.get(bean);
+			else
+				return getterMethod.invoke(bean);
 		}
 
 		public void setValueTo(Object bean, Object value) throws IllegalArgumentException, IllegalAccessException, InvocationTargetException
 		{
-			setterMethod.invoke(bean, value);
+			if (field != null)
+				field.set(bean, value);
+			else
+				setterMethod.invoke(bean, value);
+		}
+
+		@Override
+		public boolean equals(Object o)
+		{
+			if (this.name != null && o != null && o instanceof Property)
+			{
+				return this.name.equals(((Property) o).name);
+			}
+			else
+			{
+				return false;
+			}
+		}
+
+		@Override
+		public int hashCode()
+		{
+			return this.name.hashCode();
 		}
 	}
 

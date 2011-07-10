@@ -1,17 +1,23 @@
 package com.anormous.mapper;
 
 import java.lang.annotation.Annotation;
+import java.lang.reflect.Field;
 import java.lang.reflect.InvocationTargetException;
 import java.lang.reflect.Method;
 import java.util.LinkedHashMap;
+import java.util.LinkedList;
+import java.util.List;
 import java.util.Map;
 
 import android.content.ContentValues;
 import android.database.Cursor;
+import android.provider.ContactsContract.CommonDataKinds.Relation;
 import android.util.Log;
 
+import com.anormous.annotation.Association.AssociationType;
 import com.anormous.annotation.Column;
 import com.anormous.annotation.IdentityColumn;
+import com.anormous.annotation.Association;
 import com.anormous.annotation.Table;
 import com.anormous.error.AnormousException;
 import com.anormous.error.InvalidClassTypeException;
@@ -61,82 +67,93 @@ public class DefaultEntityMapper implements IEntityMapper
 			mapping.setEntityClass(entityClass);
 			mapping.setMappedTableName(generateTableNameFromClass(entityClass));
 
+			Map<String, Property> properties = getAllPropertiesForClass(entityClass);
+
 			IdColumnMapping potentialId = null;
 
-			for (Method getter : entityClass.getMethods())
+			for (String propertyName : properties.keySet())
 			{
-				String propertyName = getter.getName().substring(3);
-				propertyName = Character.toLowerCase(propertyName.charAt(0)) + propertyName.substring(1);
+				Property property = properties.get(propertyName);
+				boolean isIdMapping = false;
 
-				Method setter = null;
-				if ((setter = getSetterIfValidGetter(entityClass, getter)) != null)
+				Column columnAnnotation = (Column) property.getColumnAnnotation();
+				IdentityColumn idAnnotation = (IdentityColumn) property.getIdAnnotation();
+				Association associationAnnotation = (Association) property.getAssociationAnnotation();
+
+				ColumnMapping columnMapping = new ColumnMapping();
+
+				columnMapping.setProperty(property);
+				columnMapping.setJavaType(property.getType());
+
+				String columnName = generateColumnNameFromProprety(propertyName);
+				String columnSize = "";
+				String defaultValue = "";
+				String columnType = resolveSQLType(property);
+
+				if (idAnnotation != null)
 				{
-					Property property = new Property(propertyName, entityClass, getter, setter, getter.getReturnType());
-
-					boolean isIdMapping = false;
-
-					Column columnAnnotation = (Column) getter.getAnnotation(Column.class);
-					IdentityColumn idAnnotation = (IdentityColumn) getter.getAnnotation(IdentityColumn.class);
-
-					ColumnMapping columnMapping = new ColumnMapping();
-
-					columnMapping.setProperty(property);
-					columnMapping.setJavaType(getter.getReturnType());
-
-					String columnName = generateColumnNameFromProprety(getter);
-					String columnSize = "";
-					String defaultValue = "";
-					String columnType = resolveSQLType(property);
-
-					if (idAnnotation != null)
+					if (idAnnotation.value() != null && idAnnotation.value().length() > 0)
 					{
 						columnName = idAnnotation.value();
-
-						if (idAnnotation.size() != null && idAnnotation.size().length() > 0)
-							columnSize = idAnnotation.size();
-
-						if (idAnnotation.defaultValue() != null && idAnnotation.defaultValue().length() > 0)
-							defaultValue = idAnnotation.defaultValue();
-
-						if (idAnnotation.dataType() != null && idAnnotation.dataType().length() > 0)
-							columnType = idAnnotation.dataType();
-
-						isIdMapping = true;
 					}
-					else if (columnAnnotation != null)
+
+					if (idAnnotation.size() != null && idAnnotation.size().length() > 0)
+						columnSize = idAnnotation.size();
+
+					if (idAnnotation.defaultValue() != null && idAnnotation.defaultValue().length() > 0)
+						defaultValue = idAnnotation.defaultValue();
+
+					if (idAnnotation.dataType() != null && idAnnotation.dataType().length() > 0)
+						columnType = idAnnotation.dataType();
+
+					isIdMapping = true;
+				}
+				else if (columnAnnotation != null)
+				{
+					if (columnAnnotation.value() != null && columnAnnotation.value().length() > 0)
 					{
 						columnName = columnAnnotation.value();
-
-						if (columnAnnotation.size() != null && columnAnnotation.size().length() > 0)
-							columnSize = columnAnnotation.size();
-
-						if (columnAnnotation.defaultValue() != null && columnAnnotation.defaultValue().length() > 0)
-							defaultValue = columnAnnotation.defaultValue();
-
-						if (columnAnnotation.dataType() != null && columnAnnotation.dataType().length() > 0)
-							columnType = columnAnnotation.dataType();
 					}
 
-					columnMapping.setColumnName(columnName);
-					columnMapping.setColumnSize(columnSize);
-					columnMapping.setDefaultValue(defaultValue);
-					columnMapping.setColumnType(columnType);
+					if (columnAnnotation.size() != null && columnAnnotation.size().length() > 0)
+						columnSize = columnAnnotation.size();
 
-					if (isIdMapping && mapping.getIdMapping() == null)
+					if (columnAnnotation.defaultValue() != null && columnAnnotation.defaultValue().length() > 0)
+						defaultValue = columnAnnotation.defaultValue();
+
+					if (columnAnnotation.dataType() != null && columnAnnotation.dataType().length() > 0)
+						columnType = columnAnnotation.dataType();
+				}
+				else if (associationAnnotation != null)
+				{
+					if (associationAnnotation.value() != null && associationAnnotation.value().length() > 0)
 					{
-						IdColumnMapping idColumnMapping = new IdColumnMapping(idAnnotation.enforce(), idAnnotation.reuse(), columnMapping);
+						columnName = associationAnnotation.value();
+					}
 
-						mapping.setIdMapping(idColumnMapping);
-						mapping.setColumnMapping(property, idColumnMapping);
-					}
-					else if (getter.getName().equals("getId"))
-					{
-						potentialId = new IdColumnMapping(columnMapping);
-					}
-					else
-					{
-						mapping.setColumnMapping(property, columnMapping);
-					}
+					Class<?> associativeClass = associationAnnotation.associativeClass();
+					AssociationType type = associationAnnotation.type();
+				}
+
+				columnMapping.setColumnName(columnName);
+				columnMapping.setColumnSize(columnSize);
+				columnMapping.setDefaultValue(defaultValue);
+				columnMapping.setColumnType(columnType);
+
+				if (isIdMapping && mapping.getIdMapping() == null)
+				{
+					IdColumnMapping idColumnMapping = new IdColumnMapping(idAnnotation.enforce(), idAnnotation.reuse(), columnMapping);
+
+					mapping.setIdMapping(idColumnMapping);
+					mapping.setColumnMapping(property, idColumnMapping);
+				}
+				else if (propertyName.equals("id"))
+				{
+					potentialId = new IdColumnMapping(columnMapping);
+				}
+				else
+				{
+					mapping.setColumnMapping(property, columnMapping);
 				}
 			}
 
@@ -150,6 +167,57 @@ public class DefaultEntityMapper implements IEntityMapper
 
 			return mapping;
 		}
+	}
+
+	private Map<String, Property> getAllPropertiesForClass(Class<?> entityClass)
+	{
+		LinkedHashMap<String, Property> result = new LinkedHashMap<String, EntityMapping.Property>();
+
+		Property property = null;
+
+		for (Field field : entityClass.getFields())
+		{
+			String propertyName = field.getName();
+			Column columnAnnotation = (Column) field.getAnnotation(Column.class);
+			IdentityColumn idAnnotation = (IdentityColumn) field.getAnnotation(IdentityColumn.class);
+
+			property = new Property(propertyName, entityClass, null, null, field, field.getType(), idAnnotation != null ? idAnnotation : columnAnnotation);
+
+			result.put(propertyName, property);
+		}
+
+		for (Method getter : entityClass.getMethods())
+		{
+			String propertyName = getter.getName().substring(3);
+			propertyName = Character.toLowerCase(propertyName.charAt(0)) + propertyName.substring(1);
+
+			Column columnAnnotation = (Column) getter.getAnnotation(Column.class);
+			IdentityColumn idAnnotation = (IdentityColumn) getter.getAnnotation(IdentityColumn.class);
+
+			property = new Property(propertyName, entityClass, getter, null, null, getter.getReturnType(), idAnnotation != null ? idAnnotation : columnAnnotation);
+
+			if (!result.containsKey(propertyName))
+			{
+				try
+				{
+					property.setField(entityClass.getField(propertyName));
+				}
+				catch (NoSuchFieldException ex)
+				{
+
+				}
+
+				Method setter = null;
+				if ((setter = getSetterIfValidGetter(entityClass, getter)) != null)
+				{
+					property.setSetterMethod(setter);
+				}
+
+				result.put(propertyName, property);
+			}
+		}
+
+		return result;
 	}
 
 	@Override
@@ -455,11 +523,11 @@ public class DefaultEntityMapper implements IEntityMapper
 		return returnValue;
 	}
 
-	public String generateColumnNameFromProprety(Method method)
+	public String generateColumnNameFromProprety(String propertyName)
 	{
 		String returnValue = null;
 
-		returnValue = camelToDelimited(method.getName().substring(3));
+		returnValue = camelToDelimited(propertyName);
 
 		return returnValue;
 	}
