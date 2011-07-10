@@ -142,11 +142,19 @@ public class AnormousSession
 		}
 	}
 
+	private boolean autoOpened = false;
+
 	public synchronized void begin() throws AnormousException
 	{
 		try
 		{
-			if (db != null && db.isOpen())
+			if (db == null || !db.isOpen())
+			{
+				open(WRITE);
+				autoOpened = true;
+			}
+
+			if (db != null && db.isOpen() && !inTransaction)
 			{
 				db.beginTransaction();
 				inTransaction = true;
@@ -169,6 +177,13 @@ public class AnormousSession
 
 				inTransaction = false;
 			}
+
+			if (autoOpened)
+			{
+				autoOpened = false;
+
+				close();
+			}
 		}
 		catch (Exception ex)
 		{
@@ -186,6 +201,13 @@ public class AnormousSession
 
 				inTransaction = false;
 			}
+
+			if (autoOpened)
+			{
+				autoOpened = false;
+
+				close();
+			}
 		}
 		catch (Exception ex)
 		{
@@ -199,40 +221,14 @@ public class AnormousSession
 		{
 			boolean opened = autoOpen(WRITE);
 
-			EntityMapping mapping = mapper.mapClass(bean.getClass());
+			EntityMapping<?> mapping = mapper.mapClass(bean.getClass());
 
 			syncClassAndTableSchema(mapping);
 
-			if (mapping.getIdMapping() != null && mapping.getIdMapping().isEnforce())
-			{
-				Object objectId;
-
-				try
-				{
-					objectId = mapping.getIdMapping().getProperty().getValueFrom(bean);
-				}
-				catch (IllegalArgumentException e)
-				{
-					Log.e(this.getClass().toString(), "Error occured while performing insertion", e);
-
-					throw new AnormousException("Error occured while performing insertion", e);
-				}
-				catch (IllegalAccessException e)
-				{
-					Log.e(this.getClass().toString(), "Error occured while performing insertion", e);
-
-					throw new AnormousException("Error occured while performing insertion", e);
-				}
-				catch (InvocationTargetException e)
-				{
-					Log.e(this.getClass().toString(), "Error occured while performing insertion", e);
-
-					throw new AnormousException("Error occured while performing insertion", e);
-				}
-
-				if (alreadyExists(mapping, objectId))
-					throw new DuplicateKeyViolationException("Duplicate records for class : " + mapping.getEntityClass() + " with id : " + objectId);
-			}
+			// Huge performance hit!!! Lets rely on DB primary key enforcement.
+			// Log.d(this.getClass().toString(),
+			// "Checking duplicate constraint");
+			// enforceUniqueConstraint(bean, mapping);
 
 			ContentValues values = mapper.beanToValues(bean);
 
@@ -262,15 +258,48 @@ public class AnormousSession
 		}
 	}
 
-	public synchronized Object update(Object bean, String whereClause, String[] whereArgs) throws AnormousException
+	@SuppressWarnings("unused")
+	private void enforceUniqueConstraint(Object bean, EntityMapping<?> mapping) throws AnormousException, DuplicateKeyViolationException
+	{
+		if (mapping.getIdMapping() != null && mapping.getIdMapping().isEnforce())
+		{
+			Object objectId;
+
+			try
+			{
+				objectId = mapping.getIdMapping().getProperty().getValueFrom(bean);
+			}
+			catch (IllegalArgumentException e)
+			{
+				Log.e(this.getClass().toString(), "Error occured while performing insertion", e);
+
+				throw new AnormousException("Error occured while performing insertion", e);
+			}
+			catch (IllegalAccessException e)
+			{
+				Log.e(this.getClass().toString(), "Error occured while performing insertion", e);
+
+				throw new AnormousException("Error occured while performing insertion", e);
+			}
+			catch (InvocationTargetException e)
+			{
+				Log.e(this.getClass().toString(), "Error occured while performing insertion", e);
+
+				throw new AnormousException("Error occured while performing insertion", e);
+			}
+
+			if (alreadyExists(mapping, objectId))
+				throw new DuplicateKeyViolationException("Duplicate records for class : " + mapping.getEntityClass() + " with id : " + objectId);
+		}
+	}
+
+	public synchronized <T> T update(T bean, String whereClause, String[] whereArgs) throws AnormousException
 	{
 		try
 		{
 			boolean opened = autoOpen(WRITE);
 
-			EntityMapping mapping = mapper.mapClass(bean.getClass());
-
-			syncClassAndTableSchema(mapping);
+			EntityMapping<?> mapping = mapper.mapClass(bean.getClass());
 
 			ContentValues values = mapper.beanToValues(bean);
 
@@ -292,11 +321,11 @@ public class AnormousSession
 		}
 	}
 
-	public synchronized Object update(Object bean) throws AnormousException
+	public synchronized <T> T update(T bean) throws AnormousException
 	{
 		try
 		{
-			EntityMapping mapping = mapper.mapClass(bean.getClass());
+			EntityMapping<?> mapping = mapper.mapClass(bean.getClass());
 
 			if (mapping.getIdMapping() != null)
 			{
@@ -342,9 +371,7 @@ public class AnormousSession
 		{
 			boolean opened = autoOpen(WRITE);
 
-			EntityMapping mapping = mapper.mapClass(bean.getClass());
-
-			syncClassAndTableSchema(mapping);
+			EntityMapping<?> mapping = mapper.mapClass(bean.getClass());
 
 			whereClause = mapper.forwardMapColumnNames(whereClause, bean.getClass());
 
@@ -366,7 +393,7 @@ public class AnormousSession
 	{
 		try
 		{
-			EntityMapping mapping = mapper.mapClass(bean.getClass());
+			EntityMapping<?> mapping = mapper.mapClass(bean.getClass());
 
 			if (mapping.getIdMapping() != null)
 			{
@@ -463,70 +490,70 @@ public class AnormousSession
 		}
 	}
 
-	public synchronized List<?> select(boolean distinct, Class<?> entityClass) throws AnormousException
+	public synchronized <T> List<T> select(boolean distinct, Class<T> entityClass) throws AnormousException
 	{
 		return select(distinct, entityClass, null, null, null, null, null, null);
 	}
 
-	public synchronized List<?> select(boolean distinct, Class<?> entityClass, Object id) throws AnormousException
+	public synchronized <T> List<T> select(boolean distinct, Class<T> entityClass, Object id) throws AnormousException
 	{
 		return select(distinct, entityClass, "Id = ?", new String[] { id + "" }, null, null, null, null);
 	}
 
-	public synchronized List<?> select(boolean distinct, Class<?> entityClass, String whereClause, String whereArgs[]) throws AnormousException
+	public synchronized <T> List<T> select(boolean distinct, Class<T> entityClass, String whereClause, String whereArgs[]) throws AnormousException
 	{
 		return select(distinct, entityClass, whereClause, whereArgs, null, null, null, null);
 	}
 
-	public synchronized List<?> select(boolean distinct, Class<?> entityClass, String whereClause, String whereArgs[], String groupBy, String having) throws AnormousException
+	public synchronized <T> List<T> select(boolean distinct, Class<T> entityClass, String whereClause, String whereArgs[], String groupBy, String having) throws AnormousException
 	{
 		return select(distinct, entityClass, whereClause, whereArgs, groupBy, having, null, null);
 	}
 
-	public synchronized List<?> select(boolean distinct, Class<?> entityClass, String whereClause, String whereArgs[], String groupBy, String having, String orderBy) throws AnormousException
+	public synchronized <T> List<T> select(boolean distinct, Class<T> entityClass, String whereClause, String whereArgs[], String groupBy, String having, String orderBy) throws AnormousException
 	{
 		return select(distinct, entityClass, whereClause, whereArgs, groupBy, having, orderBy, null);
 	}
 
-	public synchronized List<?> select(Class<?> entityClass) throws AnormousException
+	public synchronized <T> List<T> select(Class<T> entityClass) throws AnormousException
 	{
 		return select(false, entityClass, null, null, null, null, null, null);
 	}
 
-	public synchronized List<?> select(Class<?> entityClass, Object id) throws AnormousException
+	public synchronized <T> List<T> select(Class<T> entityClass, Object id) throws AnormousException
 	{
 		return select(false, entityClass, "Id = ?", new String[] { id + "" }, null, null, null, null);
 	}
 
-	public synchronized List<?> select(Class<?> entityClass, String whereClause, String whereArgs[]) throws AnormousException
+	public synchronized <T> List<T> select(Class<T> entityClass, String whereClause, String whereArgs[]) throws AnormousException
 	{
 		return select(false, entityClass, whereClause, whereArgs, null, null, null, null);
 	}
 
-	public synchronized List<?> select(Class<?> entityClass, String whereClause, String whereArgs[], String groupBy, String having) throws AnormousException
+	public synchronized <T> List<T> select(Class<T> entityClass, String whereClause, String whereArgs[], String groupBy, String having) throws AnormousException
 	{
 		return select(false, entityClass, whereClause, whereArgs, groupBy, having, null, null);
 	}
 
-	public synchronized List<?> select(Class<?> entityClass, String whereClause, String[] whereArgs, String groupBy, String having, String orderBy) throws AnormousException
+	public synchronized <T> List<T> select(Class<T> entityClass, String whereClause, String[] whereArgs, String groupBy, String having, String orderBy) throws AnormousException
 	{
 		return select(false, entityClass, whereClause, whereArgs, groupBy, having, orderBy, null);
 	}
 
-	public synchronized List<?> select(Class<?> entityClass, String whereClause, String[] whereArgs, String groupBy, String having, String orderBy, String limit) throws AnormousException
+	public synchronized <T> List<T> select(Class<T> entityClass, String whereClause, String[] whereArgs, String groupBy, String having, String orderBy, String limit) throws AnormousException
 	{
 		return select(false, entityClass, whereClause, whereArgs, groupBy, having, orderBy, limit);
 	}
 
-	public synchronized List<?> select(boolean distinct, Class<?> entityClass, String whereClause, String[] whereArgs, String groupBy, String having, String orderBy, String limit) throws AnormousException
+	public synchronized <T> List<T> select(boolean distinct, Class<T> entityClass, String whereClause, String[] whereArgs, String groupBy, String having, String orderBy, String limit) throws AnormousException
 	{
 		try
 		{
-			List<Object> result = new ArrayList<Object>();
+			List<T> result = new ArrayList<T>();
 
 			boolean opened = autoOpen(READ);
 
-			EntityMapping mapping = mapper.mapClass(entityClass);
+			EntityMapping<?> mapping = mapper.mapClass(entityClass);
 
 			String tableName = mapping.getMappedTableName();
 
@@ -566,7 +593,7 @@ public class AnormousSession
 
 			while (cursor.moveToNext())
 			{
-				Object objBean = mapper.valuesToBean(cursor, entityClass);
+				T objBean = mapper.valuesToBean(cursor, entityClass);
 
 				if (objBean != null)
 				{
@@ -588,7 +615,7 @@ public class AnormousSession
 		}
 	}
 
-	private boolean alreadyExists(EntityMapping mapping, Object id) throws SQLiteException
+	private boolean alreadyExists(EntityMapping<?> mapping, Object id) throws SQLiteException
 	{
 		String tableName = mapping.getMappedTableName();
 
@@ -597,15 +624,20 @@ public class AnormousSession
 		return cursor.moveToFirst();
 	}
 
-	private boolean syncClassAndTableSchema(EntityMapping mapping) throws AnormousException
+	private boolean syncClassAndTableSchema(EntityMapping<?> mapping) throws AnormousException
 	{
 		try
 		{
-			boolean tableExists = db.rawQuery("SELECT name FROM sqlite_master WHERE type='table' AND name= ?;", new String[] { mapping.getMappedTableName() }).moveToFirst();
-
-			if (!tableExists)
+			if (!mapping.isTableExists())
 			{
-				db.execSQL(mapper.generateCreateTableStatement(mapping.getEntityClass()));
+				boolean tableExists = db.rawQuery("SELECT name FROM sqlite_master WHERE type='table' AND name= ?;", new String[] { mapping.getMappedTableName() }).moveToFirst();
+
+				if (!tableExists)
+				{
+					db.execSQL(mapper.generateCreateTableStatement(mapping.getEntityClass()));
+				}
+
+				mapping.setTableExists(true);
 			}
 
 			return true;
@@ -629,15 +661,18 @@ public class AnormousSession
 			return true;
 		}
 
-		if (mode == WRITE)
-			begin();
+		if (!inTransaction)
+		{
+			if (mode == WRITE)
+				begin();
+		}
 
 		return false;
 	}
 
 	private boolean autoClose(boolean opened) throws AnormousException
 	{
-		if (!opened)
+		if (opened)
 		{
 			end();
 

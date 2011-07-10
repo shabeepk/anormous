@@ -11,12 +11,23 @@ import com.anormous.annotation.Column;
 import com.anormous.annotation.IdentityColumn;
 import com.anormous.annotation.Association;
 
-public class EntityMapping
+public class EntityMapping<T>
 {
-	private Class<?> entityClass;
+	private Class<T> entityClass;
 	private String mappedTableName;
 	private IdColumnMapping idMapping;
+	private boolean tableExists;
 	private Map<Property, ColumnMapping> mappedColumns = new HashMap<Property, ColumnMapping>();
+
+	public boolean isTableExists()
+	{
+		return tableExists;
+	}
+
+	public void setTableExists(boolean tableExists)
+	{
+		this.tableExists = tableExists;
+	}
 
 	public IdColumnMapping getIdMapping()
 	{
@@ -33,12 +44,12 @@ public class EntityMapping
 		return new HashMap<Property, ColumnMapping>(mappedColumns);
 	}
 
-	public Class<?> getEntityClass()
+	public Class<T> getEntityClass()
 	{
 		return entityClass;
 	}
 
-	public void setEntityClass(Class<?> entityClass)
+	public void setEntityClass(Class<T> entityClass)
 	{
 		this.entityClass = entityClass;
 	}
@@ -96,6 +107,11 @@ public class EntityMapping
 			this.field = field;
 			this.type = type;
 
+			setAnnotation(annotation);
+		}
+
+		public void setAnnotation(Annotation annotation)
+		{
 			if (annotation instanceof Column)
 			{
 				this.columnAnnotation = (Column) annotation;

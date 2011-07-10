@@ -7,11 +7,11 @@ import com.anormous.error.AnormousException;
 
 public interface IEntityMapper
 {
-	EntityMapping mapClass(Class<?> entityClass) throws AnormousException;
+	<T> EntityMapping<T> mapClass(Class<T> entityClass) throws AnormousException;
 
 	ContentValues beanToValues(Object bean) throws AnormousException;
 
-	Object valuesToBean(Cursor cursor, Class<?> entityClass) throws AnormousException;
+	<T> T valuesToBean(Cursor cursor, Class<T> entityClass) throws AnormousException;
 
 	String forwardMapColumnNames(String query, Class<?> entityClass) throws AnormousException;
 

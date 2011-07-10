@@ -24,7 +24,7 @@ import com.anormous.mapper.EntityMapping.Property;
 
 public class DefaultEntityMapper implements IEntityMapper
 {
-	private static LinkedHashMap<Class<?>, EntityMapping> mapperCache = new LinkedHashMap<Class<?>, EntityMapping>();
+	private static Map<Class<?>, EntityMapping<?>> mapperCache = new LinkedHashMap<Class<?>, EntityMapping<?>>();
 
 	public DefaultEntityMapper()
 	{
@@ -34,7 +34,7 @@ public class DefaultEntityMapper implements IEntityMapper
 	@Override
 	public String forwardMapColumnNames(String query, Class<?> entityClass) throws AnormousException
 	{
-		EntityMapping mapping = mapClass(entityClass);
+		EntityMapping<?> mapping = mapClass(entityClass);
 
 		String result = query;
 
@@ -47,19 +47,22 @@ public class DefaultEntityMapper implements IEntityMapper
 		return result;
 	}
 
+	@SuppressWarnings("unchecked")
 	@Override
-	public EntityMapping mapClass(Class<?> entityClass) throws AnormousException
+	public <T> EntityMapping<T> mapClass(Class<T> entityClass) throws AnormousException
 	{
 		if (mapperCache.containsKey(entityClass))
 		{
-			return mapperCache.get(entityClass);
+			EntityMapping<?> entityMapping = mapperCache.get(entityClass);
+
+			return (EntityMapping<T>) entityMapping;
 		}
 		else
 		{
 			if (entityClass.isAnonymousClass() || entityClass.isArray() || entityClass.isEnum() || entityClass.isAnnotation() || entityClass.isLocalClass())
 				throw new InvalidClassTypeException("Class [" + entityClass.getName() + "] can not be persisted. It may be because the class is one of anonymous class, array, enum, local or annotation.");
 
-			EntityMapping mapping = new EntityMapping();
+			EntityMapping<T> mapping = new EntityMapping<T>();
 
 			mapping.setEntityClass(entityClass);
 			mapping.setMappedTableName(generateTableNameFromClass(entityClass));
@@ -174,33 +177,19 @@ public class DefaultEntityMapper implements IEntityMapper
 
 		Property property = null;
 
-		for (Field field : entityClass.getFields())
-		{
-			String propertyName = field.getName();
-			Column columnAnnotation = field.getAnnotation(Column.class);
-			IdentityColumn idAnnotation = field.getAnnotation(IdentityColumn.class);
-
-			if (!field.isAccessible())
-				field.setAccessible(true);
-
-			property = new Property(propertyName, entityClass, null, null, field, field.getType(), idAnnotation != null ? idAnnotation : columnAnnotation);
-		}
-
 		for (Method getter : entityClass.getMethods())
 		{
-			String propertyName = getter.getName().substring(3);
-			propertyName = Character.toLowerCase(propertyName.charAt(0)) + propertyName.substring(1);
-
-			Column columnAnnotation = getter.getAnnotation(Column.class);
-			IdentityColumn idAnnotation = getter.getAnnotation(IdentityColumn.class);
-
-			if (!result.containsKey(propertyName))
+			if (getter.getName().startsWith("get") && getter.getParameterTypes().length == 0)
 			{
-				property = new Property(propertyName, entityClass, getter, null, null, getter.getReturnType(), idAnnotation != null ? idAnnotation : columnAnnotation);
+				String propertyName = getter.getName().substring(3);
+				propertyName = Character.toLowerCase(propertyName.charAt(0)) + propertyName.substring(1);
+
+				property = new Property(propertyName, entityClass, getter, null, null, getter.getReturnType(), null);
 
 				try
 				{
-					property.setField(entityClass.getField(propertyName));
+					Field field = entityClass.getField(propertyName);
+					property.setField(field);
 				}
 				catch (NoSuchFieldException ex)
 				{
@@ -212,19 +201,66 @@ public class DefaultEntityMapper implements IEntityMapper
 				{
 					property.setSetterMethod(setter);
 				}
+
+				setAnnotation(property);
+
+				result.put(property.getName(), property);
 			}
 		}
 
-		if (property != null)
-			result.put(property.getName(), property);
+		for (Field field : entityClass.getFields())
+		{
+			String propertyName = field.getName();
+
+			if (!result.containsKey(propertyName))
+			{
+				if (!field.isAccessible())
+					field.setAccessible(true);
+
+				property = new Property(propertyName, entityClass, null, null, field, field.getType(), null);
+
+				setAnnotation(property);
+
+				result.put(property.getName(), property);
+			}
+		}
 
 		return result;
+	}
+
+	public void setAnnotation(Property property)
+	{
+		Column columnAnnotation = null;
+		IdentityColumn idAnnotation = null;
+		Association associationAnnotation = null;
+
+		if (property.getField() != null)
+		{
+			if (property.getField().getAnnotation(Column.class) != null)
+				columnAnnotation = property.getField().getAnnotation(Column.class);
+			if (property.getField().getAnnotation(IdentityColumn.class) != null)
+				idAnnotation = property.getField().getAnnotation(IdentityColumn.class);
+			if (property.getField().getAnnotation(Association.class) != null)
+				associationAnnotation = property.getField().getAnnotation(Association.class);
+		}
+
+		if (property.getGetterMethod() != null)
+		{
+			if (property.getGetterMethod().getAnnotation(Column.class) != null)
+				columnAnnotation = property.getGetterMethod().getAnnotation(Column.class);
+			if (property.getGetterMethod().getAnnotation(IdentityColumn.class) != null)
+				idAnnotation = property.getGetterMethod().getAnnotation(IdentityColumn.class);
+			if (property.getGetterMethod().getAnnotation(Association.class) != null)
+				associationAnnotation = property.getGetterMethod().getAnnotation(Association.class);
+		}
+
+		property.setAnnotation(idAnnotation != null ? idAnnotation : (columnAnnotation != null ? columnAnnotation : associationAnnotation));
 	}
 
 	@Override
 	public String generateCreateTableStatement(Class<?> entityClass) throws AnormousException
 	{
-		EntityMapping mapping = mapClass(entityClass);
+		EntityMapping<?> mapping = mapClass(entityClass);
 
 		StringBuffer sql = new StringBuffer("CREATE TABLE " + mapping.getMappedTableName() + " ( ");
 		boolean first = true;
@@ -324,14 +360,15 @@ public class DefaultEntityMapper implements IEntityMapper
 	}
 
 	@Override
-	public Object valuesToBean(Cursor cursor, Class<?> entityClass) throws AnormousException
+	public <T> T valuesToBean(Cursor cursor, Class<T> entityClass) throws AnormousException
 	{
-		Object bean;
+		T bean;
+
 		try
 		{
 			bean = entityClass.newInstance();
 
-			EntityMapping mapping = mapClass(entityClass);
+			EntityMapping<T> mapping = mapClass(entityClass);
 
 			Map<Property, ColumnMapping> columnMappings = mapping.getMappedColumns();
 
@@ -361,7 +398,7 @@ public class DefaultEntityMapper implements IEntityMapper
 	{
 		ContentValues contentValues = new ContentValues();
 
-		EntityMapping mapping = mapClass(bean.getClass());
+		EntityMapping<?> mapping = mapClass(bean.getClass());
 
 		Map<Property, ColumnMapping> columnMappings = mapping.getMappedColumns();
 
