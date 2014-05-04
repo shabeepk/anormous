@@ -6,10 +6,11 @@ import java.io.IOException;
 import java.io.InputStream;
 import java.io.OutputStream;
 
+import com.anormous.logger.Logger;
+
 import android.content.Context;
 import android.database.SQLException;
 import android.database.sqlite.SQLiteDatabase;
-import android.util.Log;
 
 /**
  * @author sabdullah
@@ -32,7 +33,7 @@ public abstract class AutoReplaceDBHelper extends AnormousGenericDBHelper
 		if (dbCopyHappened)
 		{
 			myDataBase = openDatabase(SQLiteDatabase.OPEN_READONLY);
-			Log.i(this.getClass().toString(), "Setting Database Version");
+			Logger.i(this.getClass().toString(), "Setting Database Version");
 			myDataBase.setVersion(dbVersion);
 		}
 
@@ -49,7 +50,7 @@ public abstract class AutoReplaceDBHelper extends AnormousGenericDBHelper
 		if (dbCopyHappened)
 		{
 			myDataBase = openDatabase(SQLiteDatabase.OPEN_READWRITE);
-			Log.i(this.getClass().toString(), "Setting Database Version");
+			Logger.i(this.getClass().toString(), "Setting Database Version");
 			myDataBase.setVersion(dbVersion);
 		}
 
@@ -61,7 +62,7 @@ public abstract class AutoReplaceDBHelper extends AnormousGenericDBHelper
 	@Override
 	public void onCreate(SQLiteDatabase db)
 	{
-		Log.i(this.getClass().toString(), "Database OnCreate Called");
+		Logger.i(this.getClass().toString(), "Database OnCreate Called");
 
 		try
 		{
@@ -69,7 +70,7 @@ public abstract class AutoReplaceDBHelper extends AnormousGenericDBHelper
 		}
 		catch (IOException ex)
 		{
-			Log.e(this.getClass().toString(), "Error Creating Database", ex);
+			Logger.e(this.getClass().toString(), "Error Creating Database", ex);
 
 			throw new Error("Error copying database");
 		}
@@ -78,13 +79,13 @@ public abstract class AutoReplaceDBHelper extends AnormousGenericDBHelper
 	@Override
 	public void onUpgrade(SQLiteDatabase db, int oldVersion, int newVersion)
 	{
-		Log.i(this.getClass().toString(), "Database OnUpgrade Called");
-		Log.i(this.getClass().toString(), "oldVersion = " + oldVersion + ", newVersion = " + newVersion);
+		Logger.i(this.getClass().toString(), "Database OnUpgrade Called");
+		Logger.i(this.getClass().toString(), "oldVersion = " + oldVersion + ", newVersion = " + newVersion);
 
 		if (oldVersion < newVersion)
 		{
 			// Older version of DB Found
-			Log.i(this.getClass().toString(), "Refreshing DB to version : " + newVersion);
+			Logger.i(this.getClass().toString(), "Refreshing DB to version : " + newVersion);
 
 			dbContext.deleteDatabase(dbName);
 
@@ -112,7 +113,7 @@ public abstract class AutoReplaceDBHelper extends AnormousGenericDBHelper
 
 	private void copyDBFileFromAssetsToAppFolder(SQLiteDatabase db) throws IOException
 	{
-		Log.i(this.getClass().toString(), "Copying pre created database to folder : " + dbPath);
+		Logger.i(this.getClass().toString(), "Copying pre created database to folder : " + dbPath);
 
 		dbCopyHappened = true;
 		// Open your local db as the input stream
@@ -123,7 +124,7 @@ public abstract class AutoReplaceDBHelper extends AnormousGenericDBHelper
 
 		File currentDB = new File(outFileName);
 
-		Log.i(this.getClass().toString(), "DB File Existance Status : " + currentDB.exists());
+		Logger.i(this.getClass().toString(), "DB File Existance Status : " + currentDB.exists());
 
 		currentDB.delete();
 

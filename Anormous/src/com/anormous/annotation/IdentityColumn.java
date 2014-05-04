@@ -9,7 +9,7 @@ import java.lang.annotation.Target;
 @Target({ ElementType.METHOD, ElementType.FIELD })
 public @interface IdentityColumn
 {
-	String value();
+	String value() default "";
 
 	String size() default "";
 

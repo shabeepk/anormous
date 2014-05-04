@@ -11,16 +11,16 @@ import android.database.Cursor;
 import android.database.sqlite.SQLiteDatabase;
 import android.database.sqlite.SQLiteException;
 import android.database.sqlite.SQLiteOpenHelper;
-import android.util.Log;
 
 import com.anormous.error.AnormousException;
 import com.anormous.error.DuplicateKeyViolationException;
 import com.anormous.helper.AnormousGenericDBHelper;
+import com.anormous.logger.Logger;
 import com.anormous.mapper.DefaultEntityMapper;
 import com.anormous.mapper.EntityMapping;
-import com.anormous.mapper.IEntityMapper;
 import com.anormous.mapper.EntityMapping.ColumnMapping;
 import com.anormous.mapper.EntityMapping.Property;
+import com.anormous.mapper.IEntityMapper;
 
 public class AnormousSession
 {
@@ -215,20 +215,17 @@ public class AnormousSession
 		}
 	}
 
-	public synchronized void insert(Object bean) throws AnormousException
+	public synchronized void save(Object bean) throws AnormousException
 	{
+		boolean opened = false;
+
 		try
 		{
-			boolean opened = autoOpen(WRITE);
+			opened = autoOpen(WRITE);
 
 			EntityMapping<?> mapping = mapper.mapClass(bean.getClass());
 
 			syncClassAndTableSchema(mapping);
-
-			// Huge performance hit!!! Lets rely on DB primary key enforcement.
-			// Log.d(this.getClass().toString(),
-			// "Checking duplicate constraint");
-			// enforceUniqueConstraint(bean, mapping);
 
 			ContentValues values = mapper.beanToValues(bean);
 
@@ -245,8 +242,6 @@ public class AnormousSession
 					property.setValueTo(bean, property.getValueFrom(bean));
 				}
 			}
-
-			autoClose(opened);
 		}
 		catch (AnormousException ex)
 		{
@@ -255,6 +250,46 @@ public class AnormousSession
 		catch (Exception ex)
 		{
 			throw new AnormousException("Database insert operation failed", ex);
+		}
+		finally
+		{
+			autoClose(opened);
+		}
+	}
+
+	public synchronized void saveOrUpdate(Object bean) throws AnormousException
+	{
+		boolean opened = false;
+		try
+		{
+			opened = autoOpen(WRITE);
+
+			EntityMapping<?> mapping = mapper.mapClass(bean.getClass());
+
+			syncClassAndTableSchema(mapping);
+
+			Property property = mapping.getIdMapping().getProperty();
+
+			if (alreadyExists(mapping, property.getValueFrom(bean)))
+			{
+				update(bean);
+			}
+			else
+			{
+				save(bean);
+			}
+		}
+		catch (AnormousException ex)
+		{
+			throw ex;
+		}
+		catch (Exception ex)
+		{
+			throw new AnormousException("Database insert operation failed", ex);
+		}
+		finally
+		{
+			autoClose(opened);
 		}
 	}
 
@@ -271,19 +306,19 @@ public class AnormousSession
 			}
 			catch (IllegalArgumentException e)
 			{
-				Log.e(this.getClass().toString(), "Error occured while performing insertion", e);
+				Logger.e(this.getClass().toString(), "Error occured while performing insertion", e);
 
 				throw new AnormousException("Error occured while performing insertion", e);
 			}
 			catch (IllegalAccessException e)
 			{
-				Log.e(this.getClass().toString(), "Error occured while performing insertion", e);
+				Logger.e(this.getClass().toString(), "Error occured while performing insertion", e);
 
 				throw new AnormousException("Error occured while performing insertion", e);
 			}
 			catch (InvocationTargetException e)
 			{
-				Log.e(this.getClass().toString(), "Error occured while performing insertion", e);
+				Logger.e(this.getClass().toString(), "Error occured while performing insertion", e);
 
 				throw new AnormousException("Error occured while performing insertion", e);
 			}
@@ -547,11 +582,13 @@ public class AnormousSession
 
 	public synchronized <T> List<T> select(boolean distinct, Class<T> entityClass, String whereClause, String[] whereArgs, String groupBy, String having, String orderBy, String limit) throws AnormousException
 	{
+		List<T> result = new ArrayList<T>();
+
+		boolean opened = false;
+
 		try
 		{
-			List<T> result = new ArrayList<T>();
-
-			boolean opened = autoOpen(READ);
+			opened = autoOpen(READ);
 
 			EntityMapping<?> mapping = mapper.mapClass(entityClass);
 
@@ -601,17 +638,26 @@ public class AnormousSession
 				}
 			}
 
-			autoClose(opened);
-
 			return result;
 		}
 		catch (AnormousException ex)
 		{
 			throw ex;
 		}
+		catch (SQLiteException ex)
+		{
+			if (ex.getMessage().contains("no such table"))
+				return result;
+
+			throw new AnormousException("Database select operation failed", ex);
+		}
 		catch (Exception ex)
 		{
 			throw new AnormousException("Database select operation failed", ex);
+		}
+		finally
+		{
+			autoClose(opened);
 		}
 	}
 

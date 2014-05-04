@@ -315,6 +315,12 @@ public class EntityMapping<T>
 		{
 			this.columnSize = columnSize;
 		}
+
+		@Override
+		public String toString()
+		{
+			return "ColumnMapping [property=" + property + ", columnName=" + columnName + ", javaType=" + javaType + ", columnType=" + columnType + ", defaultValue=" + defaultValue + ", columnSize=" + columnSize + "]";
+		}
 	}
 
 	public static class IdColumnMapping extends ColumnMapping
@@ -369,6 +375,12 @@ public class EntityMapping<T>
 			super.setColumnSize(columnMapping.getColumnSize());
 			super.setColumnType(columnMapping.getColumnType());
 			super.setDefaultValue(columnMapping.getDefaultValue());
+		}
+
+		@Override
+		public String toString()
+		{
+			return "IdColumnMapping [getProperty()=" + getProperty() + ", getDefaultValue()=" + getDefaultValue() + ", getJavaType()=" + getJavaType() + ", getColumnName()=" + getColumnName() + ", getColumnType()=" + getColumnType() + ", getColumnSize()=" + getColumnSize() + ", toString()=" + super.toString() + ", getClass()=" + getClass() + ", hashCode()=" + hashCode() + ", enforce=" + enforce + ", reuse=" + reuse + ", ]";
 		}
 	}
 }
