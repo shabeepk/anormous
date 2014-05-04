@@ -9,7 +9,7 @@ public class Logger
 		DEBUG, VERBOSE, INFO, WARN, ERROR, WTF
 	}
 
-	public static final Level LEVEL = Level.WARN;
+	public static Level LEVEL = Level.WARN;
 
 	private static boolean canLog(Level level)
 	{

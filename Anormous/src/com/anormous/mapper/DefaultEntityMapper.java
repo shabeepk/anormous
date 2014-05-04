@@ -453,7 +453,7 @@ public class DefaultEntityMapper implements IEntityMapper
 
 				if (value != null && (property.getType().equals(String.class) || value.length() > 0) && !value.equals("null"))
 				{
-					if (property.getType().equals(Boolean.class))
+					if (property.getType().equals(Boolean.class) || property.getType().equals(Boolean.TYPE))
 					{
 						property.setValueTo(bean, "1".equals(value) || "true".equals(value));
 					}
