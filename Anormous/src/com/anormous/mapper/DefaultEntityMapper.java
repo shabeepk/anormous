@@ -451,7 +451,7 @@ public class DefaultEntityMapper implements IEntityMapper
 
 				Logger.d(TAG, "Setting value " + value + " for " + columnMapping.getColumnName());
 
-				if (value != null && value.length() > 0 && !value.equals("null"))
+				if (value != null && (property.getType().equals(String.class) || value.length() > 0) && !value.equals("null"))
 				{
 					if (property.getType().equals(Boolean.class))
 					{
@@ -491,14 +491,14 @@ public class DefaultEntityMapper implements IEntityMapper
 					}
 					else
 					{
-						Logger.w(TAG, "Couldn't match type for value: " + value + ", type: " + property.getType());
+						Logger.i(TAG, "Couldn't match type for value: " + value + ", type: " + property.getType());
 					}
 				}
 				else
 				{
 					property.setValueTo(bean, null);
 
-					Logger.w(TAG, "Null value: " + value + ", type: " + property.getType());
+					Logger.i(TAG, "Null value: " + value + ", type: " + property.getType());
 				}
 			}
 		}
