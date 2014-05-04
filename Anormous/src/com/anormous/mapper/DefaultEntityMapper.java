@@ -182,9 +182,9 @@ public class DefaultEntityMapper implements IEntityMapper
 
 		for (Method getter : entityClass.getMethods())
 		{
-			if (getter.getName().startsWith("get") && getter.getParameterTypes().length == 0)
+			if ((getter.getName().startsWith("get") || getter.getName().startsWith("is")) && getter.getParameterTypes().length == 0)
 			{
-				String propertyName = getter.getName().substring(3);
+				String propertyName = getter.getName().startsWith("get") ? getter.getName().substring(3) : getter.getName().substring(2);
 				propertyName = Character.toLowerCase(propertyName.charAt(0)) + propertyName.substring(1);
 
 				property = new Property(propertyName, entityClass, getter, null, null, getter.getReturnType(), null);
