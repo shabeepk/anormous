@@ -358,9 +358,9 @@ public class DefaultEntityMapper implements IEntityMapper
 	{
 		try
 		{
-			if (method.getName().startsWith("get") && method.getParameterTypes().length == 0 && !method.getName().equals("getClass"))
+			if ((method.getName().startsWith("get") || method.getName().startsWith("is")) && method.getParameterTypes().length == 0 && !method.getName().equals("getClass"))
 			{
-				Method setter = entityClass.getMethod(method.getName().replace("get", "set"), method.getReturnType());
+				Method setter = entityClass.getMethod(method.getName().replace(method.getName().startsWith("get") ? "get" : "is", "set"), method.getReturnType());
 
 				return setter;
 			}
